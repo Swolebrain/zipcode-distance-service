@@ -11,7 +11,7 @@ const zipsTable = [];
 
 var stream =null;
 
-fs.createReadStream('C:/Users/Victor/Desktop/free-zipcode-database-Primary.csv')
+fs.createReadStream(__dirname+'free-zipcode-database-Primary.csv')
   .pipe(csv())
   .on('data', function (data) {
     //console.log('Zip: %s Lat: %s Long: %s', data.Zipcode, data.Lat, data.Long);
