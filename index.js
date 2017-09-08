@@ -1,131 +1,36 @@
-const csv = require('csv-parser')
-const fs = require('fs')
+const express = require('express');
+const app = express();
+const bp = require('body-parser');
+
 const mongoose = require('mongoose')
 const db = mongoose.createConnection('mongodb://localhost/zipcode-distances');
+const ZipDistance = require('./ZipDistance')(db);
 mongoose.Promise = global.Promise;
 
-const ZipDistance = require('./ZipDistance')(db);
+app.use(bp.json());
 
-const zipCodeHash = {};
-const zipsTable = [];
+app.get('/', (req,res)=>{
+  res.end(`You need to POST to /zipdistances/one-to-many with the following body:<br><br>
+      source (string): the one zip code you want to measure distances to
+      destinations ([String] ): the list of zip code strings that you want distances to
+    `);
+});
 
-var stream =null;
-
-fs.createReadStream('C:/Users/Victor/Desktop/free-zipcode-database-Primary.csv')
-  .pipe(csv())
-  .on('data', function (data) {
-    //console.log('Zip: %s Lat: %s Long: %s', data.Zipcode, data.Lat, data.Long);
-    zipsTable.push(data);
-  })
-  // .on('end', function(){
-  //   console.log("Hitting end processing...");
-  //   stream = fs.createWriteStream('./zipz.json')
-  //   let start = new Date().getTime();
-  //   stream.once('open', function(fd){
-  //     buildZipsFile();
-  //     //stream.end();
-  //     console.log("Total processing time:", (new Date().getTime() - start)/(1000*60)  );
-  //   })
-  // })
-  .on('end', function(){
-    console.log("Hitting end processing...");
-    let start = new Date().getTime();
-    loadZipDB(start);
-  })
-
-
-
-function buildZipMatrix(){
-  for (let i =0; i < zipsTable.length; i++){
-    var tableRow = zipsTable[i];
-    var outerZip = tableRow.Zipcode;
-    var lat1 = tableRow.Lat;
-    var lon1 = tableRow.Lon;
-    if (typeof zipCodeHash[outerZip] == 'undefined') zipCodeHash[outerZip] = {};
-    for (let j = 0; j < zipsTable.length; j++){
-      var innerZip = zipsTable[j].Zipcode;
-      if (innerZip === outerZip){
-        zipCodeHash[outerZip][innerZip] = 0;
-        continue;
-      }
-      var distance = getDistanceBetween(lat1, lon1, zipsTable[j].Lat, zipsTable[j].Lon);
-      zipCodeHash[outerZip][innerZip] = distance;
-    }
+app.post('/zipdistances/one-to-many', (req,res)=>{
+  let {source, destinations} = req.body;
+  if (!source || !destinations || !destinations.length || destinations.length === 0) {
+    console.log(source, destinations);
+    return res.status(400).json({error: "Malformed Request"});
   }
-}
+  let query = {zip: source};
+  let projection = destinations.reduce((acc,zip)=>{
+    //acc["distances."+zip]=1;
+    return [...acc, "distances."+zip];
+  },[]).join(" ");
+  console.log(projection);
+  ZipDistance.find(query, projection)
+  .then(dbres=>res.json(dbres))
+  .catch(err=>res.status(500).json({err}));
+});
 
-async function buildZipsFile(){
-  for (let i =0; i < zipsTable.length; i++){
-    var tableRow = zipsTable[i];
-    var outerZip = tableRow.Zipcode;
-    console.log("Processing", outerZip);
-    var lat1 = tableRow.Lat;
-    var lon1 = tableRow.Lon;
-    let collection = { zip: outerZip, distances: {}};
-    for (let j = 0; j < zipsTable.length; j++){
-      var innerZip = zipsTable[j].Zipcode;
-      console.log("      Processing",outerZip,">",innerZip);
-      if (innerZip === outerZip){
-        collection.distances[innerZip] = 0;
-        continue;
-      }
-      var distance = getDistanceBetween(lat1, lon1, zipsTable[j].Lat, zipsTable[j].Lon);
-      collection.distances[innerZip] = distance;
-      await stream.write(JSON.stringify(collection));
-    }
-  }
-  stream.end();
-}
-
-async function loadZipDB(start){
-  for (let i =0; i < zipsTable.length; i++){
-    let tableRow = zipsTable[i];
-    let outerZip = tableRow.Zipcode;
-    let lat1 = tableRow.Lat;
-    let lon1 = tableRow.Long;
-    let collection = { zip: outerZip, distances: {}};
-
-    for (let j = 0; j < zipsTable.length; j++){
-      let innerZip = zipsTable[j].Zipcode;
-      // console.log("           Processing "+innerZip+".");
-      if (innerZip === outerZip){
-        collection.distances[innerZip] = 0;
-        continue;
-      }
-      var distance = getDistanceBetween(lat1, lon1, zipsTable[j].Lat, zipsTable[j].Long);
-      //console.log(`           Distance between ${outerZip} and ${innerZip}: ${distance}`);
-      collection.distances[innerZip] = distance;
-      // console.log("           "+result._id);
-    }
-    if (i%200 == 0)
-      console.log("Sending a model to db with zip", outerZip, "and",
-        Object.keys(collection.distances).length, "distances");
-    let model = new ZipDistance(collection);
-    let result = await model.save();
-  }
-  console.log("Total processing time:", (new Date().getTime() - start)/(1000*60)  );
-}
-
-Number.prototype.toRadians = function() {
-return this * Math.PI / 180;
-}
-
-function getDistanceBetween(lat1, lon1, lat2, lon2){
-  lat1 = Number(lat1);
-  lon1 = Number(lon1);
-  lat2 = Number(lat2);
-  lon2 = Number(lon2);
-  var R = 3959; // miles
-  var f1 = lat1.toRadians();
-  var f2 = lat2.toRadians();
-  var df = (lat2-lat1).toRadians();
-  var dl = (lon2-lon1).toRadians();
-
-  var a = Math.sin(df/2) * Math.sin(df/2) +
-        Math.cos(f1) * Math.cos(f2) *
-        Math.sin(dl/2) * Math.sin(dl/2);
-  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-  var d = R * c;
-  return d;
-}
+app.listen(1339, ()=>console.log("Server listening...."));
