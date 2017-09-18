@@ -16,7 +16,37 @@ app.get('/', (req,res)=>{
     `);
 });
 
+app.post('/ziplookupbyradius', (req,res)=>{
+  console.log('POST /ziplookupbyradius:', req.body);
+  let {zip, miles} = req.body;
+  if (!zip || !miles || Number(zip) == NaN || Number(miles) == NaN){
+    console.log('Received illegal request:', zip, ',',  miles);
+    res.status(400).json({error: 'Malformed Request'});
+    console.log("Looking up", query);
+  }
+  
+  let query = {zip};
+  ZipDistance.find(query)
+	.then(dbres=>{
+	  console.log('Db responded');
+	  //let finalResult = 
+	  for (let key in dbres[0]) console.log(key);
+	  for (let zip in dbres[0].distances){
+	    if(dbres[0].distances[zip] > Number(miles)) delete dbres[0].distances[zip];
+	    //else console.log('keeping zip...', zip);
+	  }
+	  console.log(`Sending back ${Object.keys(dbres[0].distances).length} distances`);
+	  res.json(dbres[0].distances);
+	})
+	.catch(err=>{
+	  console.log('Error in DB read:', err);
+	  res.status(500).json({err})
+	});
+});
+
+
 app.post('/zipdistances/one-to-many', (req,res)=>{
+  console.log('POST /zipdistances/one-to-many:', req.body);
   let {source, destinations} = req.body;
   if (!source || !destinations || !destinations.length || destinations.length === 0) {
     console.log(source, destinations);
@@ -29,8 +59,14 @@ app.post('/zipdistances/one-to-many', (req,res)=>{
   },[]).join(" ");
   console.log(projection);
   ZipDistance.find(query, projection)
-  .then(dbres=>res.json(dbres))
-  .catch(err=>res.status(500).json({err}));
+  .then(dbres=>{
+     console.log(dbres);
+     return res.json(dbres)}
+   )
+  .catch(err=>{
+     console.log('Error in db read', err);
+     res.status(500).json({err})
+  });
 });
 
 app.listen(9000, ()=>console.log("Server listening...."));
