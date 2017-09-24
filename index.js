@@ -1,13 +1,11 @@
 const express = require('express');
 const app = express();
-const bp = require('body-parser');
 
 const mongoose = require('mongoose')
 const db = mongoose.createConnection('mongodb://localhost/zipcode-distances');
 const ZipDistance = require('./ZipDistance')(db);
 mongoose.Promise = global.Promise;
 
-app.use(bp.json());
 
 app.get('/', (req,res)=>{
   res.end(`You need to POST to /zipdistances/one-to-many with the following body:<br><br>
@@ -16,26 +14,27 @@ app.get('/', (req,res)=>{
     `);
 });
 
-app.post('/ziplookupbyradius', (req,res)=>{
+app.get('/ziplookupbyradius', (req,res)=>{
+  let start = new Date().getTime();
   console.log('POST /ziplookupbyradius:', req.body);
-  let {zip, miles} = req.body;
+  let {zip, miles} = req.query;
   if (!zip || !miles || Number(zip) == NaN || Number(miles) == NaN){
     console.log('Received illegal request:', zip, ',',  miles);
     res.status(400).json({error: 'Malformed Request'});
-    console.log("Looking up", query);
+    //console.log("Looking up", query);
   }
   
   let query = {zip};
   ZipDistance.find(query)
 	.then(dbres=>{
-	  console.log('Db responded');
+	  //console.log('Db responded');
 	  //let finalResult = 
-	  for (let key in dbres[0]) console.log(key);
+	  //for (let key in dbres[0]) console.log(key);
 	  for (let zip in dbres[0].distances){
 	    if(dbres[0].distances[zip] > Number(miles)) delete dbres[0].distances[zip];
 	    //else console.log('keeping zip...', zip);
 	  }
-	  console.log(`Sending back ${Object.keys(dbres[0].distances).length} distances`);
+	  console.log(`Sending back ${Object.keys(dbres[0].distances).length} distances, processing time ${new Date().getTime()-start} ms`);
 	  res.json(dbres[0].distances);
 	})
 	.catch(err=>{
@@ -45,9 +44,9 @@ app.post('/ziplookupbyradius', (req,res)=>{
 });
 
 
-app.post('/zipdistances/one-to-many', (req,res)=>{
+app.get('/zipdistances/one-to-many', (req,res)=>{
   console.log('POST /zipdistances/one-to-many:', req.body);
-  let {source, destinations} = req.body;
+  let {source, destinations} = req.query;
   if (!source || !destinations || !destinations.length || destinations.length === 0) {
     console.log(source, destinations);
     return res.status(400).json({error: "Malformed Request"});

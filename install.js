@@ -11,8 +11,14 @@ const zipsTable = [];
 
 var stream =null;
 
-fs.createReadStream(__dirname+'/free-zipcode-database-Primary.csv')
-  .pipe(csv())
+stream = fs.createReadStream(__dirname+'/US.txt')
+  .pipe(csv({
+	separator: '\t', 
+	headers:[
+		'Country', 'Zipcode', 'City', 'Statename', 'State', 
+		'County', 'wot1', 'wot2', 'wot3', 'Lat', 'Long', 'wot4',
+  	]})
+  )
   .on('data', function (data) {
     //console.log('Zip: %s Lat: %s Long: %s', data.Zipcode, data.Lat, data.Long);
     zipsTable.push(data);
@@ -31,6 +37,7 @@ fs.createReadStream(__dirname+'/free-zipcode-database-Primary.csv')
     console.log("Hitting end processing...");
     let start = new Date().getTime();
     loadZipDB(start);
+    stream.end();
   })
 
 
